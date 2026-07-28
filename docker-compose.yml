@@ -1,0 +1,11 @@
+version: '3.9'
+
+services:
+  flower-bot:
+    build: .
+    container_name: flower-bot
+    env_file:
+      - .env
+    volumes:
+      - ./data.json:/app/data.json
+    restart: unless-stopped
