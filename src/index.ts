@@ -19,6 +19,7 @@ type GroupConfig = {
   currentIndex: number;
   nextDue?: string;
   reminderSentDate?: string;
+  overdueReminderSentDate?: string;
 };
 
 type BotData = Record<string, GroupConfig>;
@@ -136,6 +137,15 @@ async function sendReminder(config: GroupConfig) {
   config.reminderSentDate = dayjs().format('YYYY-MM-DD');
 }
 
+async function sendOverdueReminder(config: GroupConfig, dueDate: string) {
+  const responsible = getCurrentResponsible(config);
+  if (!responsible) {
+    return;
+  }
+  await bot.sendMessage(config.chatId, `${responsible}, срок полива был ${dayjs(dueDate).format('DD.MM.YYYY')}, но никто не отчитался о выполнении задачи. Если полил — напиши /done, иначе выполни задачу или используй /skip.`);
+  config.overdueReminderSentDate = dayjs().format('YYYY-MM-DD');
+}
+
 async function checkReminders() {
   const now = dayjs();
   const today = now.format('YYYY-MM-DD');
@@ -151,18 +161,23 @@ async function checkReminders() {
       continue;
     }
 
-    if (!due.isSame(today, 'day')) {
-      continue;
-    }
-
-    if (config.reminderSentDate === today) {
-      continue;
-    }
-
     const [hour, minute] = config.notifyTime.split(':').map(Number);
-    const remindMoment = dayjs().hour(hour).minute(minute).second(0);
-    if (now.isSame(remindMoment) || now.isAfter(remindMoment)) {
-      await sendReminder(config);
+    const remindMoment = now.hour(hour).minute(minute).second(0);
+    if (now.isBefore(remindMoment)) {
+      continue;
+    }
+
+    if (due.isSame(today, 'day')) {
+      if (config.reminderSentDate !== today) {
+        await sendReminder(config);
+        await saveData();
+      }
+      continue;
+    }
+
+    const dueDate = due.format('YYYY-MM-DD');
+    if (due.isBefore(today, 'day') && config.overdueReminderSentDate !== today) {
+      await sendOverdueReminder(config, dueDate);
       await saveData();
     }
   }
@@ -178,6 +193,7 @@ function advanceResponsible(config: GroupConfig) {
 function assignNextDue(config: GroupConfig) {
   config.nextDue = dayjs().add(config.intervalDays, 'day').startOf('day').toISOString();
   config.reminderSentDate = undefined;
+  config.overdueReminderSentDate = undefined;
 }
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
