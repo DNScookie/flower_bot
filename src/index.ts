@@ -19,7 +19,7 @@ type GroupConfig = {
   currentIndex: number;
   nextDue?: string;
   reminderSentDate?: string;
-  overdueReminderSentFor?: string;
+  overdueReminderSentDate?: string;
 };
 
 type BotData = Record<string, GroupConfig>;
@@ -142,8 +142,8 @@ async function sendOverdueReminder(config: GroupConfig, dueDate: string) {
   if (!responsible) {
     return;
   }
-  await bot.sendMessage(config.chatId, `${responsible}, вчера (${dayjs(dueDate).format('DD.MM.YYYY')}) нужно было полить растение, но никто не отчитался о выполнении задачи. Если полил — напиши /done, иначе выполни задачу или используй /skip.`);
-  config.overdueReminderSentFor = dueDate;
+  await bot.sendMessage(config.chatId, `${responsible}, срок полива был ${dayjs(dueDate).format('DD.MM.YYYY')}, но никто не отчитался о выполнении задачи. Если полил — напиши /done, иначе выполни задачу или используй /skip.`);
+  config.overdueReminderSentDate = dayjs().format('YYYY-MM-DD');
 }
 
 async function checkReminders() {
@@ -176,7 +176,7 @@ async function checkReminders() {
     }
 
     const dueDate = due.format('YYYY-MM-DD');
-    if (due.add(1, 'day').isSame(today, 'day') && config.overdueReminderSentFor !== dueDate) {
+    if (due.isBefore(today, 'day') && config.overdueReminderSentDate !== today) {
       await sendOverdueReminder(config, dueDate);
       await saveData();
     }
@@ -193,7 +193,7 @@ function advanceResponsible(config: GroupConfig) {
 function assignNextDue(config: GroupConfig) {
   config.nextDue = dayjs().add(config.intervalDays, 'day').startOf('day').toISOString();
   config.reminderSentDate = undefined;
-  config.overdueReminderSentFor = undefined;
+  config.overdueReminderSentDate = undefined;
 }
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
